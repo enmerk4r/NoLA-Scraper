@@ -9,19 +9,27 @@ import urllib3
 class Scraper:
     def __init__(self, 
     imgFolder="downloads", 
-    downloadFiles=True):
+    downloadFiles=True,
+    goToNextParcel=True,
+    entryLimit = None):
         self.Pages = {}
         self.Driver = webdriver.Chrome()
         self.ImageFolder = imgFolder
+        self.GoToNextParcel = goToNextParcel
+        self.EntryLimit = entryLimit
         if not os.path.exists(imgFolder) and downloadFiles:
             os.makedirs(imgFolder)
 
     def ReadWebPage(self, url):
+        print("============================")
+        print("Parsing page: {0}".format(len(self.Pages) + 1))
+        print("============================")
         self.Driver.get(url)
         ownerParcelInfo = self.ParseOwnerParcelInfo()
         ownerParcelInfo.URI = url
 
         address = self.slugify(ownerParcelInfo.MailingAddress)
+
         print(address, ": parsed owner / parcel data")
 
         valueObjects = self.ParseValueInfo()
@@ -42,29 +50,48 @@ class Scraper:
 
         # Get downloadable links
         imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri = self.GetHyperlinks()
-
-        # Download files
-        taxDistrMapPath = os.path.join(pagePath, "SpecialTaxDistrictMap.pdf")
-        self.DownloadFile(specialTaxDistrictMapUri, taxDistrMapPath)
-        ownerParcelInfo.SpecialTaxDistrictMap = taxDistrMapPath
-
-        parcelMapPath = os.path.join(pagePath, "ParcelMap.pdf")
-        self.DownloadFile(parcelMapUri, parcelMapPath)
-        ownerParcelInfo.ParcelMap = parcelMapPath
-        
-        assmntAreaPath = os.path.join(pagePath, "AssessmentAreaMap.pdf")
-        self.DownloadFile(AssessmentAreaMapUri, assmntAreaPath)
-        ownerParcelInfo.AssessmentAreaMap = assmntAreaPath
-
-        # Download Images
-        self.DownloadImages(imageUri, imagesPath)
+        ownerParcelInfo.SpecialTaxDistrictMap = specialTaxDistrictMapUri
+        ownerParcelInfo.ParcelMap = parcelMapUri
+        ownerParcelInfo.AssessmentAreaMap = AssessmentAreaMapUri
         ownerParcelInfo.ImageUrl = imageUri
+
+        if self.DownloadImages:
+            # Download files
+            numFiles = 0
+            if specialTaxDistrictMapUri is not None:
+                taxDistrMapPath = os.path.join(pagePath, "SpecialTaxDistrictMap.pdf")
+                self.DownloadFile(specialTaxDistrictMapUri, taxDistrMapPath)
+                numFiles += 1
+            
+            if parcelMapUri is not None:
+                parcelMapPath = os.path.join(pagePath, "ParcelMap.pdf")
+                self.DownloadFile(parcelMapUri, parcelMapPath)
+                numFiles += 1
+            
+            if AssessmentAreaMapUri is not None:
+                assmntAreaPath = os.path.join(pagePath, "AssessmentAreaMap.pdf")
+                self.DownloadFile(AssessmentAreaMapUri, assmntAreaPath)
+                numFiles += 1
+
+            print(address, ": downloaded {0} PDF file(s)".format(numFiles))
+
+            # Download Images
+            if imageUri is not None:
+                numImgs = self.DownloadImages(imageUri, imagesPath)
+                print(address, ": downloaded {0} image(s)".format(numImgs))
 
         # Create Page Rep
         rep = PageRep(ownerParcelInfo, valueObjects, salesObjects, url)
-        self.Pages[rep.OwnerParcelInfo.MailingAddress] = rep
+        self.Pages[hash(rep)] = rep
         rep.WriteOut()
         print(address, ": successfully written to disk")
+        if (self.GoToNextParcel):
+            if (self.EntryLimit == None or len(self.Pages) < self.EntryLimit):
+                self.ReadWebPage(nextUri)
+            elif len(self.Pages) >= self.EntryLimit:
+                print("**** REACHED ENTRY LIMIT ****")
+
+
 
     def DownloadImages(self, imagesUri, folder):
         self.Driver.get(imagesUri)
@@ -75,11 +102,16 @@ class Scraper:
             if src != "http://qpublic9.qpublic.net/images/la_orleans.jpg":
                 self.DownloadFile(src, os.path.join(folder, "img_{0}.jpg".format(counter)))
                 counter += 1
+        
+        return counter
 
     
     def GetHyperlinks(self):
-        imageLink = self.Driver.find_element_by_link_text("Enlarge/Show All")
-        imageUri = imageLink.get_attribute('href')
+        try:
+            imageLink = self.Driver.find_element_by_link_text("Enlarge/Show All")
+            imageUri = imageLink.get_attribute('href')
+        except:
+            imageUri = None
 
         nextLink = self.Driver.find_element_by_link_text("Next Parcel")
         nextUri = nextLink.get_attribute('href')
