@@ -80,6 +80,7 @@ class OwnerParcelInfoItem:
         string += "{0},".format("Parcel Map")
         string += "{0},".format("Assessment Area Map")
         string += "{0},".format("url")
+        string += "{0},".format("image url")
         string += "\n"
         return string
 
@@ -116,6 +117,7 @@ class OwnerParcelInfoItem:
 
         # Assign URI later
         self.URI = ""
+        self.ImageUrl = ""
 
     def ToCsvString(self):
         string = ""
@@ -141,6 +143,7 @@ class OwnerParcelInfoItem:
         string += "{0},".format(Helper.ToSafeCellContent(self.ParcelMap))
         string += "{0},".format(Helper.ToSafeCellContent(self.AssessmentAreaMap))
         string += "{0},".format(Helper.ToSafeCellContent(self.URI))
+        string += "{0},".format(Helper.ToSafeCellContent(self.ImageUrl))
         string += "\n"
         return string
 
