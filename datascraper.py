@@ -6,8 +6,10 @@ import re
 from pprint import pprint
 
 class Scraper:
-    def __init__(self, imgFolder="downloads", downloadFiles=True):
-        self.Pages = []
+    def __init__(self, 
+    imgFolder="downloads", 
+    downloadFiles=True):
+        self.Pages = {}
         self.Driver = webdriver.Chrome()
         self.ImageFolder = imgFolder
         if not os.path.exists(imgFolder) and downloadFiles:
@@ -16,6 +18,7 @@ class Scraper:
     def ReadWebPage(self, url):
         self.Driver.get(url)
         ownerParcelInfo = self.ParseOwnerParcelInfo()
+        ownerParcelInfo.URI = url
 
         address = self.slugify(ownerParcelInfo.MailingAddress)
         print(address, ": parsed owner / parcel data")
@@ -32,6 +35,12 @@ class Scraper:
             os.mkdir(pagePath)
         
         #Create image path
+
+        # Create Page Rep
+        rep = PageRep(ownerParcelInfo, valueObjects, salesObjects, url)
+        self.Pages[rep.OwnerParcelInfo.MailingAddress] = rep
+        rep.WriteOut()
+        print(address, ": successfully written to disk".format(len(salesObjects)))
 
     def ParseOwnerParcelInfo(self):
         owner_headers = self.Driver.find_elements_by_class_name("owner_header")
