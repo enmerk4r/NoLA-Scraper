@@ -25,7 +25,7 @@ class PageRep:
 
         # Write parcel info
         with open(ownerParcelPath, "a") as f:
-            f.write(self.OwnerParcelInfo.ToCsvString().replace("\n","").replace("\r", "") + "\n")
+            f.write(self.OwnerParcelInfo.ToCsvString())
 
         # Prepare value file
         if not os.path.exists(valueInfoPath):
@@ -255,7 +255,7 @@ class Helper:
     @staticmethod
     def ToSafeCellContent(string):
         if string is not None:
-            string = string.replace("\n", " ").replace("\r", " ")
+            string = string.replace("\n", "").replace("\r", "").replace("\"", "")
             if "," not in string:
                 return string
             else:
