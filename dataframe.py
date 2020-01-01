@@ -1,4 +1,5 @@
 import os
+import uuid
 
 class PageRep:
     def __init__(self, 
@@ -11,6 +12,7 @@ class PageRep:
         self.ValueInfoItemList = valueInfoItemList
         self.SaleTransferInfoList = saleTransferInfoItemList
         self.PageUrl = pageUrl
+        self.Guid = None
 
     def WriteOut(
         self,
@@ -21,31 +23,31 @@ class PageRep:
         # Prepare parcel file
         if not os.path.exists(ownerParcelPath):
             with open(ownerParcelPath, "w") as f:
-                f.write(OwnerParcelInfoItem.ToCsvHeader())
+                f.write("Guid," + OwnerParcelInfoItem.ToCsvHeader())
 
         # Write parcel info
         with open(ownerParcelPath, "a") as f:
-            f.write(self.OwnerParcelInfo.ToCsvString())
+            f.write("{0},{1}".format(self.Guid, self.OwnerParcelInfo.ToCsvString()))
 
         # Prepare value file
         if not os.path.exists(valueInfoPath):
             with open(valueInfoPath, "w") as f:
-                f.write("Address," + ValueInfoItem.ToCsvHeader())
+                f.write("Guid,Address," + ValueInfoItem.ToCsvHeader())
         
         # Write value info
         with open(valueInfoPath, "a") as f:
             for v in self.ValueInfoItemList:
-                f.write("{0},{1}".format(Helper.ToSafeCellContent(self.OwnerParcelInfo.MailingAddress), v.ToCsvString()))
+                f.write("{0},{1},{2}".format(self.Guid, Helper.ToSafeCellContent(self.OwnerParcelInfo.MailingAddress), v.ToCsvString()))
         
         # Prepare sales file
         if not os.path.exists(saleInfoPath):
             with open(saleInfoPath, "a") as f:
-                f.write("Address," + SaleTransferInfoItem.ToCsvHeader())
+                f.write("Guid,Address," + SaleTransferInfoItem.ToCsvHeader())
 
         # Write sales info
         with open(saleInfoPath, "a") as f:
             for v in self.SaleTransferInfoList:
-                f.write("{0},{1}".format(Helper.ToSafeCellContent(self.OwnerParcelInfo.MailingAddress), v.ToCsvString()))
+                f.write("{0},{1},{2}".format(self.Guid, Helper.ToSafeCellContent(self.OwnerParcelInfo.MailingAddress), v.ToCsvString()))
 
         
 
@@ -63,6 +65,7 @@ class OwnerParcelInfoItem:
         string += "{0},".format("Location Address")
         string += "{0},".format("Property Class")
         string += "{0},".format("Zoning District")
+        string += "{0},".format("Zoning Description")
         string += "{0},".format("Square")
         string += "{0},".format("Book")
         string += "{0},".format("Line")
@@ -90,7 +93,6 @@ class OwnerParcelInfoItem:
         self.LocationAddress = d["LocationAddress"]
         self.PropertyClass = d["PropertyClass"]
         self.SubdivisionName = d["SubdivisionName"]
-        self.ZoningDistrict = d["ZoningDistrict"]
         self.Square = d["Square"]
         self.Book = d["Book"]
         self.Line = d["Line"]
@@ -99,25 +101,20 @@ class OwnerParcelInfoItem:
         self.MunicipalDistrict = d["MunicipalDistrict"]
         self.TaxBillNumber = d["TaxBillNumber"]
         self.SpecialTaxDistrict = d["SpecialTaxDistrict"]
-        
-        # Download special tax district map later
-        self.SpecialTaxDistrictMap = ""
-
         self.LandAreaSF = d["LandArea(sqft)"]
         self.BuildingAreaSF = d["BuildingArea(sqft)"]
         self.RevisedBuildingAreaSF = d["RevisedBldgArea(sqft)"]
         self.LotFolio = d["Lot/Folio"]
         self.AssessmentArea = d["AssessmentArea"]
 
-        # Download parcel map
+        # Data to be added later
         self.ParcelMap = ""
-
-        # Download Assesment Area
         self.AssessmentAreaMap = ""
-
-        # Assign URI later
+        self.ZoningDistrict = ""
+        self.ZoningDescription = ""
         self.URI = ""
         self.ImageUrl = ""
+        self.SpecialTaxDistrictMap = ""
 
     def ToCsvString(self):
         string = ""
@@ -126,6 +123,7 @@ class OwnerParcelInfoItem:
         string += "{0},".format(Helper.ToSafeCellContent(self.LocationAddress))
         string += "{0},".format(Helper.ToSafeCellContent(self.PropertyClass))
         string += "{0},".format(Helper.ToSafeCellContent(self.ZoningDistrict))
+        string += "{0},".format(Helper.ToSafeCellContent(self.ZoningDescription))
         string += "{0},".format(Helper.ToSafeCellContent(self.Square))
         string += "{0},".format(Helper.ToSafeCellContent(self.Book))
         string += "{0},".format(Helper.ToSafeCellContent(self.Line))
@@ -247,6 +245,20 @@ class SaleTransferInfoItem:
         string += "{0},".format(Helper.ToSafeCellContent(self.InstrumentNumber))
         string += "\n"
         return string
+
+class ZoningInfoItem:
+    def __init__(self, dictionary):
+        self.FromDict(dictionary)
+
+    def FromDict(self, d):
+        try:
+            self.ZoningDistrict = d["ZoningDistrict:"]
+        except:
+            self.ZoningDistrict = ""
+        try:
+            self.ZoningDescription = d["ZoningDescription:"]
+        except:
+            self.ZoningDescription = ""
 
 class Helper:
     def __init__(self):

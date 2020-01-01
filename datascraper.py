@@ -5,13 +5,17 @@ import unicodedata
 import re
 from pprint import pprint
 import urllib3
+import time
+import datetime
+import uuid
 
 class Scraper:
     def __init__(self, 
     imgFolder="downloads", 
     downloadFiles=True,
     goToNextParcel=True,
-    entryLimit = None):
+    entryLimit = None,
+    stopWhenDuplicate=False):
         self.Pages = {}
         self.Driver = webdriver.Chrome()
         self.ImageFolder = imgFolder
@@ -19,72 +23,99 @@ class Scraper:
         self.EntryLimit = entryLimit
         if not os.path.exists(imgFolder) and downloadFiles:
             os.makedirs(imgFolder)
+        self.parsedUrls = []
+        self.StopWhenDuplicate = stopWhenDuplicate
 
     def ReadWebPage(self, url):
-        print("============================")
-        print("Parsing page: {0}".format(len(self.Pages) + 1))
-        print("============================")
-        self.Driver.get(url)
-        ownerParcelInfo = self.ParseOwnerParcelInfo()
-        ownerParcelInfo.URI = url
+        if (url in self.parsedUrls):
+           print("DUPLICATE! Skipping record")
+           if self.StopWhenDuplicate:
+               print("**** REACHED STOP CONDITION ****")
+               return
+           imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, zoningLink = self.GetHyperlinks()
+        else:
+            pageGuid = str(uuid.uuid4())
+            print("============================")
+            print("Parsing page: {0}".format(len(self.Pages) + 1))
+            print("============================")
+            self.Driver.get(url)
+            ownerParcelInfo = self.ParseOwnerParcelInfo()
+            ownerParcelInfo.URI = url
 
-        address = self.slugify(ownerParcelInfo.MailingAddress)
+            address = self.slugify(ownerParcelInfo.MailingAddress)
 
-        print(address, ": parsed owner / parcel data")
+            print(address, ": parsed owner / parcel data")
 
-        valueObjects = self.ParseValueInfo()
-        print(address, ": parsed {0} value records".format(len(valueObjects)))
+            valueObjects = self.ParseValueInfo()
+            print(address, ": parsed {0} value records".format(len(valueObjects)))
 
-        salesObjects = self.ParseSalesInfo()
-        print(address, ": parsed {0} sales records".format(len(salesObjects)))
+            salesObjects = self.ParseSalesInfo()
+            print(address, ": parsed {0} sales records".format(len(salesObjects)))
 
-        # Create page path
-        pagePath = os.path.join(self.ImageFolder, address)
-        if not os.path.exists(pagePath):
-            os.mkdir(pagePath)
-        
-        #Create image path
-        imagesPath = os.path.join(pagePath, "Images")
-        if not os.path.exists(imagesPath):
-            os.mkdir(imagesPath)
+            # Create address path
+            addressPath = os.path.join(self.ImageFolder, address)
+            if not os.path.exists(addressPath):
+                os.mkdir(addressPath)
 
-        # Get downloadable links
-        imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri = self.GetHyperlinks()
-        ownerParcelInfo.SpecialTaxDistrictMap = specialTaxDistrictMapUri
-        ownerParcelInfo.ParcelMap = parcelMapUri
-        ownerParcelInfo.AssessmentAreaMap = AssessmentAreaMapUri
-        ownerParcelInfo.ImageUrl = imageUri
-
-        if self.DownloadImages:
-            # Download files
-            numFiles = 0
-            if specialTaxDistrictMapUri is not None:
-                taxDistrMapPath = os.path.join(pagePath, "SpecialTaxDistrictMap.pdf")
-                self.DownloadFile(specialTaxDistrictMapUri, taxDistrMapPath)
-                numFiles += 1
+            # Create page path
+            pagePath = os.path.join(addressPath, pageGuid)
+            if not os.path.exists(pagePath):
+                os.mkdir(pagePath)
             
-            if parcelMapUri is not None:
-                parcelMapPath = os.path.join(pagePath, "ParcelMap.pdf")
-                self.DownloadFile(parcelMapUri, parcelMapPath)
-                numFiles += 1
-            
-            if AssessmentAreaMapUri is not None:
-                assmntAreaPath = os.path.join(pagePath, "AssessmentAreaMap.pdf")
-                self.DownloadFile(AssessmentAreaMapUri, assmntAreaPath)
-                numFiles += 1
+            #Create image path
+            imagesPath = os.path.join(pagePath, "Images")
+            if not os.path.exists(imagesPath):
+                os.mkdir(imagesPath)
 
-            print(address, ": downloaded {0} PDF file(s)".format(numFiles))
+            # Get downloadable links
+            imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, zoningLink = self.GetHyperlinks()
+            ownerParcelInfo.SpecialTaxDistrictMap = specialTaxDistrictMapUri
+            ownerParcelInfo.ParcelMap = parcelMapUri
+            ownerParcelInfo.AssessmentAreaMap = AssessmentAreaMapUri
+            ownerParcelInfo.ImageUrl = imageUri
 
-            # Download Images
-            if imageUri is not None:
-                numImgs = self.DownloadImages(imageUri, imagesPath)
-                print(address, ": downloaded {0} image(s)".format(numImgs))
+            # Parse zoning data
+            if zoningLink != None:
+                self.Driver.get(zoningLink)
+                zoningInfo = self.ParseZoningInfo(pagePath)
+                ownerParcelInfo.ZoningDistrict = zoningInfo.ZoningDistrict
+                ownerParcelInfo.ZoningDescription = zoningInfo.ZoningDescription
 
-        # Create Page Rep
-        rep = PageRep(ownerParcelInfo, valueObjects, salesObjects, url)
-        self.Pages[hash(rep)] = rep
-        rep.WriteOut()
-        print(address, ": successfully written to disk")
+
+            if self.DownloadImages:
+                # Download files
+                numFiles = 0
+                if specialTaxDistrictMapUri is not None:
+                    taxDistrMapPath = os.path.join(pagePath, "SpecialTaxDistrictMap.pdf")
+                    self.DownloadFile(specialTaxDistrictMapUri, taxDistrMapPath)
+                    numFiles += 1
+                
+                if parcelMapUri is not None:
+                    parcelMapPath = os.path.join(pagePath, "ParcelMap.pdf")
+                    self.DownloadFile(parcelMapUri, parcelMapPath)
+                    numFiles += 1
+                
+                if AssessmentAreaMapUri is not None:
+                    assmntAreaPath = os.path.join(pagePath, "AssessmentAreaMap.pdf")
+                    self.DownloadFile(AssessmentAreaMapUri, assmntAreaPath)
+                    numFiles += 1
+
+                print(address, ": downloaded {0} PDF file(s)".format(numFiles))
+
+                # Download Images
+                if imageUri is not None:
+                    numImgs = self.DownloadImages(imageUri, imagesPath)
+                    print(address, ": downloaded {0} image(s)".format(numImgs))
+
+            # Create Page Rep
+            rep = PageRep(ownerParcelInfo, valueObjects, salesObjects, url)
+            rep.Guid = pageGuid
+            self.parsedUrls.append(url)
+            self.Pages[rep.Guid] = rep
+            rep.WriteOut()
+            print(address, ": successfully written to disk")
+
+        # Next Page
         if (self.GoToNextParcel):
             if (self.EntryLimit == None or len(self.Pages) < self.EntryLimit):
                 self.ReadWebPage(nextUri)
@@ -119,13 +150,15 @@ class Scraper:
         specialTaxDistrictMapUri = None
         parcelMapUri = None
         AssessmentAreaMapUri = None
+        ZoningLink = None
 
         hyperLinks = self.Driver.find_elements_by_tag_name("a")
         for h in hyperLinks:
             href = h.get_attribute('href')
+            if "Show Viewer" in h.text:
+                    ZoningLink = href
             try:
                 img = h.find_element_by_tag_name("img")
-
                 if img.get_attribute("src") == "http://qpublic9.qpublic.net/images/special_tax_district_map.gif":
                     specialTaxDistrictMapUri = href
                 elif img.get_attribute("src") == "http://qpublic9.qpublic.net/images/spm.gif":
@@ -136,7 +169,7 @@ class Scraper:
                 pass
 
         
-        return imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri
+        return imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, ZoningLink
 
     def DownloadFile(self, url, path, chunk_size=1024):
         http = urllib3.PoolManager()
@@ -150,6 +183,54 @@ class Scraper:
                 out.write(data)
 
         r.release_conn()
+    
+    def ParseZoningInfo(self, path):
+        # Make sure the map loads fully
+        print("Waiting for the map to load...")
+        WaitStart = datetime.datetime.now()
+        WAIT_LIMIT = 60
+        fullyLoaded = False
+        while not fullyLoaded:
+            try:
+                lines = self.Driver.find_elements_by_tag_name("td")
+                for td in lines:
+                    try:
+                        b = td.find_element_by_tag_name("b")
+                        head = b.text
+                        if "Zoning District:" in head or "Future Land Use:" in head:
+                            print("Page fully loaded")
+                            time.sleep(0.5)
+                            fullyLoaded = True
+                            break
+                    except:
+                        pass
+            except:
+                time.sleep(1)
+
+            # Make sure we're not stuck
+            difference = datetime.datetime.now() - WaitStart
+            if difference.seconds > WAIT_LIMIT:
+                fullyLoaded = True
+
+        all_lines = self.Driver.find_elements_by_tag_name("td")
+        zoning_dict = {}
+
+        for td in all_lines:
+            try:
+                b = td.find_element_by_tag_name("b")
+                head = b.text
+                value = td.text
+                clean = head.replace(" ", "").replace("\n", "")
+                if clean not in zoning_dict:
+                    zoning_dict[clean] = value
+            except:
+                pass
+
+        # Save screenshot
+        self.Driver.save_screenshot(os.path.join(path, "zoning.png"))
+
+        zoningInfo = ZoningInfoItem(zoning_dict)
+        return zoningInfo
 
 
     def ParseOwnerParcelInfo(self):
