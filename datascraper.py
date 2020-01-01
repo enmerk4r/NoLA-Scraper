@@ -125,16 +125,19 @@ class Scraper:
 
 
     def DownloadImages(self, imagesUri, folder):
-        self.Driver.get(imagesUri)
-        images = self.Driver.find_elements_by_tag_name("img")
-        counter = 0
-        for img in images:
-            src = img.get_attribute("src")
-            if src != "http://qpublic9.qpublic.net/images/la_orleans.jpg":
-                self.DownloadFile(src, os.path.join(folder, "img_{0}.jpg".format(counter)))
-                counter += 1
-        
-        return counter
+        try:
+            self.Driver.get(imagesUri)
+            images = self.Driver.find_elements_by_tag_name("img")
+            counter = 0
+            for img in images:
+                src = img.get_attribute("src")
+                if src != "http://qpublic9.qpublic.net/images/la_orleans.jpg":
+                    self.DownloadFile(src, os.path.join(folder, "img_{0}.jpg".format(counter)))
+                    counter += 1
+            
+            return counter
+        except:
+            return 0
 
     
     def GetHyperlinks(self):
@@ -172,17 +175,20 @@ class Scraper:
         return imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, ZoningLink
 
     def DownloadFile(self, url, path, chunk_size=1024):
-        http = urllib3.PoolManager()
-        r = http.request('GET', url, preload_content=False)
+        try:
+            http = urllib3.PoolManager()
+            r = http.request('GET', url, preload_content=False)
 
-        with open(path, 'wb') as out:
-            while True:
-                data = r.read(chunk_size)
-                if not data:
-                    break
-                out.write(data)
+            with open(path, 'wb') as out:
+                while True:
+                    data = r.read(chunk_size)
+                    if not data:
+                        break
+                    out.write(data)
 
-        r.release_conn()
+            r.release_conn()
+        except:
+            pass
     
     def ParseZoningInfo(self, path):
         # Make sure the map loads fully
