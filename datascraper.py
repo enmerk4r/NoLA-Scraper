@@ -62,10 +62,21 @@ class Scraper:
             if not os.path.exists(pagePath):
                 os.mkdir(pagePath)
             
-            #Create image path
+            # Create image path
             imagesPath = os.path.join(pagePath, "Images")
             if not os.path.exists(imagesPath):
                 os.mkdir(imagesPath)
+
+            # Create sketch path
+            sketchPath = os.path.join(pagePath, "Sketches")
+            if not os.path.exists(sketchPath):
+                os.mkdir(sketchPath)
+
+            # Download Sketches
+            if self.DownloadImages:
+                numSketches = 0
+                numSketches += self.DownloadSketch(sketchPath)
+                print(address, ": downloaded {0} sketch(es)".format(numSketches))
 
             # Get downloadable links
             imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, zoningLink = self.GetHyperlinks()
@@ -76,15 +87,20 @@ class Scraper:
 
             # Parse zoning data
             if zoningLink != None:
-                self.Driver.get(zoningLink)
-                zoningInfo = self.ParseZoningInfo(pagePath)
-                ownerParcelInfo.ZoningDistrict = zoningInfo.ZoningDistrict
-                ownerParcelInfo.ZoningDescription = zoningInfo.ZoningDescription
+                try:
+                    self.Driver.get(zoningLink)
+                    zoningInfo = self.ParseZoningInfo(pagePath)
+                    ownerParcelInfo.ZoningDistrict = zoningInfo.ZoningDistrict
+                    ownerParcelInfo.ZoningDescription = zoningInfo.ZoningDescription
+                except:
+                    ownerParcelInfo.ZoningDistrict = ""
+                    ownerParcelInfo.ZoningDescription = ""
 
 
             if self.DownloadImages:
                 # Download files
                 numFiles = 0
+                
                 if specialTaxDistrictMapUri is not None:
                     taxDistrMapPath = os.path.join(pagePath, "SpecialTaxDistrictMap.pdf")
                     self.DownloadFile(specialTaxDistrictMapUri, taxDistrMapPath)
@@ -99,8 +115,12 @@ class Scraper:
                     assmntAreaPath = os.path.join(pagePath, "AssessmentAreaMap.pdf")
                     self.DownloadFile(AssessmentAreaMapUri, assmntAreaPath)
                     numFiles += 1
+                
+                
+
 
                 print(address, ": downloaded {0} PDF file(s)".format(numFiles))
+                
 
                 # Download Images
                 if imageUri is not None:
@@ -123,6 +143,15 @@ class Scraper:
                 print("**** REACHED ENTRY LIMIT ****")
 
 
+    def DownloadSketch(self, sketchPath):
+        try:
+            tds = self.Driver.find_element_by_class_name("sketch_main")
+            image = tds.find_element_by_tag_name("img")
+            source = image.get_attribute("src")
+            self.DownloadFile(source, os.path.join(sketchPath, "MainSketch.jpg"))
+            return 1
+        except:
+            return 0
 
     def DownloadImages(self, imagesUri, folder):
         try:
