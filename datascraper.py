@@ -8,6 +8,7 @@ import urllib3
 import time
 import datetime
 import uuid
+from selenium.common.exceptions import UnexpectedAlertPresentException
 
 class Scraper:
     def __init__(self, 
@@ -27,120 +28,125 @@ class Scraper:
         self.StopWhenDuplicate = stopWhenDuplicate
 
     def ReadWebPage(self, url):
-        if (url in self.parsedUrls):
-           print("DUPLICATE! Skipping record")
-           if self.StopWhenDuplicate:
-               print("**** REACHED STOP CONDITION ****")
-               return
-           imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, zoningLink = self.GetHyperlinks()
-        else:
-            pageGuid = str(uuid.uuid4())
-            print("============================")
-            print("Parsing page: {0}".format(len(self.Pages) + 1))
-            print("============================")
-            self.Driver.get(url)
-            ownerParcelInfo = self.ParseOwnerParcelInfo()
-            ownerParcelInfo.URI = url
+        try:
+            if (url in self.parsedUrls):
+                print("DUPLICATE! Skipping record")
+                if self.StopWhenDuplicate:
+                    print("**** REACHED STOP CONDITION ****")
+                    return
+                imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, zoningLink = self.GetHyperlinks()
+            else:
+                pageGuid = str(uuid.uuid4())
+                print("============================")
+                print("Parsing page: {0}".format(len(self.Pages) + 1))
+                print("============================")
+                self.Driver.get(url)
+                ownerParcelInfo = self.ParseOwnerParcelInfo()
+                ownerParcelInfo.URI = url
 
-            address = self.slugify(ownerParcelInfo.MailingAddress)
+                address = self.slugify(ownerParcelInfo.MailingAddress)
 
-            print(address, ": parsed owner / parcel data")
+                print(address, ": parsed owner / parcel data")
 
-            valueObjects = self.ParseValueInfo()
-            print(address, ": parsed {0} value records".format(len(valueObjects)))
+                valueObjects = self.ParseValueInfo()
+                print(address, ": parsed {0} value records".format(len(valueObjects)))
 
-            salesObjects = self.ParseSalesInfo()
-            print(address, ": parsed {0} sales records".format(len(salesObjects)))
+                salesObjects = self.ParseSalesInfo()
+                print(address, ": parsed {0} sales records".format(len(salesObjects)))
 
-            # Create address path
-            addressPath = os.path.join(self.ImageFolder, address)
-            if not os.path.exists(addressPath):
-                os.mkdir(addressPath)
+                # Create address path
+                addressPath = os.path.join(self.ImageFolder, address)
+                if not os.path.exists(addressPath):
+                    os.mkdir(addressPath)
 
-            # Create page path
-            pagePath = os.path.join(addressPath, pageGuid)
-            if not os.path.exists(pagePath):
-                os.mkdir(pagePath)
-            
-            # Create image path
-            imagesPath = os.path.join(pagePath, "Images")
-            if not os.path.exists(imagesPath):
-                os.mkdir(imagesPath)
-
-            # Create sketch path
-            sketchPath = os.path.join(pagePath, "Sketches")
-            if not os.path.exists(sketchPath):
-                os.mkdir(sketchPath)
-
-            # Download Sketches
-            if self.DownloadImages:
-                numSketches = 0
-                numSketches += self.DownloadSketch(sketchPath)
-                print(address, ": downloaded {0} sketch(es)".format(numSketches))
-
-            # Get downloadable links
-            imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, zoningLink = self.GetHyperlinks()
-            ownerParcelInfo.SpecialTaxDistrictMap = specialTaxDistrictMapUri
-            ownerParcelInfo.ParcelMap = parcelMapUri
-            ownerParcelInfo.AssessmentAreaMap = AssessmentAreaMapUri
-            ownerParcelInfo.ImageUrl = imageUri
-
-            # Parse zoning data
-            if zoningLink != None:
-                try:
-                    self.Driver.get(zoningLink)
-                    zoningInfo = self.ParseZoningInfo(pagePath)
-                    ownerParcelInfo.ZoningDistrict = zoningInfo.ZoningDistrict
-                    ownerParcelInfo.ZoningDescription = zoningInfo.ZoningDescription
-                except:
-                    ownerParcelInfo.ZoningDistrict = ""
-                    ownerParcelInfo.ZoningDescription = ""
-
-
-            if self.DownloadImages:
-                # Download files
-                numFiles = 0
+                # Create page path
+                pagePath = os.path.join(addressPath, pageGuid)
+                if not os.path.exists(pagePath):
+                    os.mkdir(pagePath)
                 
-                if specialTaxDistrictMapUri is not None:
-                    taxDistrMapPath = os.path.join(pagePath, "SpecialTaxDistrictMap.pdf")
-                    self.DownloadFile(specialTaxDistrictMapUri, taxDistrMapPath)
-                    numFiles += 1
-                
-                if parcelMapUri is not None:
-                    parcelMapPath = os.path.join(pagePath, "ParcelMap.pdf")
-                    self.DownloadFile(parcelMapUri, parcelMapPath)
-                    numFiles += 1
-                
-                if AssessmentAreaMapUri is not None:
-                    assmntAreaPath = os.path.join(pagePath, "AssessmentAreaMap.pdf")
-                    self.DownloadFile(AssessmentAreaMapUri, assmntAreaPath)
-                    numFiles += 1
-                
-                
+                # Create image path
+                imagesPath = os.path.join(pagePath, "Images")
+                if not os.path.exists(imagesPath):
+                    os.mkdir(imagesPath)
+
+                # Create sketch path
+                sketchPath = os.path.join(pagePath, "Sketches")
+                if not os.path.exists(sketchPath):
+                    os.mkdir(sketchPath)
+
+                # Download Sketches
+                if self.DownloadImages:
+                    numSketches = 0
+                    numSketches += self.DownloadSketch(sketchPath)
+                    print(address, ": downloaded {0} sketch(es)".format(numSketches))
+
+                # Get downloadable links
+                imageUri, specialTaxDistrictMapUri, parcelMapUri, AssessmentAreaMapUri, nextUri, zoningLink = self.GetHyperlinks()
+                ownerParcelInfo.SpecialTaxDistrictMap = specialTaxDistrictMapUri
+                ownerParcelInfo.ParcelMap = parcelMapUri
+                ownerParcelInfo.AssessmentAreaMap = AssessmentAreaMapUri
+                ownerParcelInfo.ImageUrl = imageUri
+
+                # Parse zoning data
+                if zoningLink != None:
+                    try:
+                        self.Driver.get(zoningLink)
+                        zoningInfo = self.ParseZoningInfo(pagePath)
+                        ownerParcelInfo.ZoningDistrict = zoningInfo.ZoningDistrict
+                        ownerParcelInfo.ZoningDescription = zoningInfo.ZoningDescription
+                    except:
+                        ownerParcelInfo.ZoningDistrict = ""
+                        ownerParcelInfo.ZoningDescription = ""
 
 
-                print(address, ": downloaded {0} PDF file(s)".format(numFiles))
-                
+                if self.DownloadImages:
+                    # Download files
+                    numFiles = 0
+                    
+                    if specialTaxDistrictMapUri is not None:
+                        taxDistrMapPath = os.path.join(pagePath, "SpecialTaxDistrictMap.pdf")
+                        self.DownloadFile(specialTaxDistrictMapUri, taxDistrMapPath)
+                        numFiles += 1
+                    
+                    if parcelMapUri is not None:
+                        parcelMapPath = os.path.join(pagePath, "ParcelMap.pdf")
+                        self.DownloadFile(parcelMapUri, parcelMapPath)
+                        numFiles += 1
+                    
+                    if AssessmentAreaMapUri is not None:
+                        assmntAreaPath = os.path.join(pagePath, "AssessmentAreaMap.pdf")
+                        self.DownloadFile(AssessmentAreaMapUri, assmntAreaPath)
+                        numFiles += 1
+                    
+                    
 
-                # Download Images
-                if imageUri is not None:
-                    numImgs = self.DownloadImages(imageUri, imagesPath)
-                    print(address, ": downloaded {0} image(s)".format(numImgs))
 
-            # Create Page Rep
-            rep = PageRep(ownerParcelInfo, valueObjects, salesObjects, url)
-            rep.Guid = pageGuid
-            self.parsedUrls.append(url)
-            self.Pages[rep.Guid] = rep
-            rep.WriteOut()
-            print(address, ": successfully written to disk")
+                    print(address, ": downloaded {0} PDF file(s)".format(numFiles))
+                    
 
-        # Next Page
-        if (self.GoToNextParcel):
-            if (self.EntryLimit == None or len(self.Pages) < self.EntryLimit):
-                self.ReadWebPage(nextUri)
-            elif len(self.Pages) >= self.EntryLimit:
-                print("**** REACHED ENTRY LIMIT ****")
+                    # Download Images
+                    if imageUri is not None:
+                        numImgs = self.DownloadImages(imageUri, imagesPath)
+                        print(address, ": downloaded {0} image(s)".format(numImgs))
+
+                # Create Page Rep
+                rep = PageRep(ownerParcelInfo, valueObjects, salesObjects, url)
+                rep.Guid = pageGuid
+                self.parsedUrls.append(url)
+                self.Pages[rep.Guid] = rep
+                rep.WriteOut()
+                print(address, ": successfully written to disk")
+
+            # Next Page
+            if (self.GoToNextParcel):
+                if (self.EntryLimit == None or len(self.Pages) < self.EntryLimit):
+                    self.ReadWebPage(nextUri)
+                elif len(self.Pages) >= self.EntryLimit:
+                    print("**** REACHED ENTRY LIMIT ****")
+        except UnexpectedAlertPresentException as exception:
+            alert_obj = self.Driver.switch_to.alert
+            alert_obj.accept()
+            self.ReadWebPage(url)
 
 
     def DownloadSketch(self, sketchPath):
@@ -222,50 +228,53 @@ class Scraper:
     def ParseZoningInfo(self, path):
         # Make sure the map loads fully
         print("Waiting for the map to load...")
-        WaitStart = datetime.datetime.now()
-        WAIT_LIMIT = 60
-        fullyLoaded = False
-        while not fullyLoaded:
-            try:
-                lines = self.Driver.find_elements_by_tag_name("td")
-                for td in lines:
-                    try:
-                        b = td.find_element_by_tag_name("b")
-                        head = b.text
-                        if "Zoning District:" in head or "Future Land Use:" in head:
-                            print("Page fully loaded")
-                            time.sleep(0.5)
-                            fullyLoaded = True
-                            break
-                    except:
-                        pass
-            except:
-                time.sleep(1)
+        try:
+            WaitStart = datetime.datetime.now()
+            WAIT_LIMIT = 60
+            fullyLoaded = False
+            while not fullyLoaded:
+                try:
+                    lines = self.Driver.find_elements_by_tag_name("td")
+                    for td in lines:
+                        try:
+                            b = td.find_element_by_tag_name("b")
+                            head = b.text
+                            if "Zoning District:" in head or "Future Land Use:" in head:
+                                print("Page fully loaded")
+                                time.sleep(0.5)
+                                fullyLoaded = True
+                                break
+                        except:
+                            pass
+                except:
+                    time.sleep(1)
 
-            # Make sure we're not stuck
-            difference = datetime.datetime.now() - WaitStart
-            if difference.seconds > WAIT_LIMIT:
-                fullyLoaded = True
+                # Make sure we're not stuck
+                difference = datetime.datetime.now() - WaitStart
+                if difference.seconds > WAIT_LIMIT:
+                    fullyLoaded = True
 
-        all_lines = self.Driver.find_elements_by_tag_name("td")
-        zoning_dict = {}
+            all_lines = self.Driver.find_elements_by_tag_name("td")
+            zoning_dict = {}
 
-        for td in all_lines:
-            try:
-                b = td.find_element_by_tag_name("b")
-                head = b.text
-                value = td.text
-                clean = head.replace(" ", "").replace("\n", "")
-                if clean not in zoning_dict:
-                    zoning_dict[clean] = value
-            except:
-                pass
+            for td in all_lines:
+                try:
+                    b = td.find_element_by_tag_name("b")
+                    head = b.text
+                    value = td.text
+                    clean = head.replace(" ", "").replace("\n", "")
+                    if clean not in zoning_dict:
+                        zoning_dict[clean] = value
+                except:
+                    pass
 
-        # Save screenshot
-        self.Driver.save_screenshot(os.path.join(path, "zoning.png"))
+            # Save screenshot
+            self.Driver.save_screenshot(os.path.join(path, "zoning.png"))
 
-        zoningInfo = ZoningInfoItem(zoning_dict)
-        return zoningInfo
+            zoningInfo = ZoningInfoItem(zoning_dict)
+            return zoningInfo
+        except UnexpectedAlertPresentException as exception:
+            return None
 
 
     def ParseOwnerParcelInfo(self):
